@@ -9,14 +9,12 @@ communicate with the Halite engine. If you need
 to log anything use the logging module.
 """
 import hlt
-import logging
 
 # GAME START
 # Here we define the bot's name as Settler and initialize the game,
 #  including communication with the Halite engine.
-game = hlt.Game("Gabeb v.2")
+game = hlt.Game("Gabeb v.3")
 # Then we print our start message to the logs
-logging.info("Starting my bot!")
 
 planets_queued = []
 unowned_planets = []
@@ -36,11 +34,6 @@ while True:
     me = game_map.my_id
     my_ships = game_map.get_me().all_ships()
 
-    '''
-    s = f"num ships: {len(my_ships)}"
-    logging.info(s)
-    '''
-
     for ship in my_ships:
 
         # If ship is docked
@@ -58,10 +51,15 @@ while True:
         # now, filter out everything that isn't a planet
         d = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Planet)]
 
+        nearest_allied_planet = []
+        target_found = False
+
         # For each non-destroyed planet
         for planet in d:
             # If the planet is owned
             if planet.is_owned():
+                if nearest_allied_planet == []:
+                    nearest_allied_planet = planet
                 # Skip this planet IF there are other planets to go to
                 if len(unowned_planets) != 0:
                     continue
@@ -90,6 +88,7 @@ while True:
             if ship.can_dock(planet):
                 # We add the command by appending it to the command_queue
                 command_queue.append(ship.dock(planet))
+                break
             else:
                 # If one of our ships is already going to this planet
                 if planet in planets_queued:
@@ -102,10 +101,11 @@ while True:
                         game_map,
                         speed=int(hlt.constants.MAX_SPEED),
                         ignore_ships=False)
-                    planets_queued.append(planet)
                     if navigate_command:
+                        target_found = True
+                        planets_queued.append(planet)
                         command_queue.append(navigate_command)
-            break
+                        break
 
     # Send our set of commands to the Halite engine for this turn
     game.send_command_queue(command_queue)
