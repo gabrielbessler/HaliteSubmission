@@ -9,17 +9,18 @@ communicate with the Halite engine. If you need
 to log anything use the logging module.
 """
 import hlt
+import logging
 
 # GAME START
 # Here we define the bot's name as Settler and initialize the game,
 #  including communication with the Halite engine.
-game = hlt.Game("Gabeb v.3")
+game = hlt.Game("Gabeb v.4")
 # Then we print our start message to the logs
 
-planets_queued = []
 unowned_planets = []
 
 while True:
+    planets_queued = []
     # Update the map for the new turn
     game_map = game.update_map()
 
@@ -88,6 +89,7 @@ while True:
             if ship.can_dock(planet):
                 # We add the command by appending it to the command_queue
                 command_queue.append(ship.dock(planet))
+                target_found = True
                 break
             else:
                 # If one of our ships is already going to this planet
@@ -106,6 +108,22 @@ while True:
                         planets_queued.append(planet)
                         command_queue.append(navigate_command)
                         break
+
+        # there are planets left but all are already targetted
+        if len(unowned_planets) != 0 and not target_found:
+            #  just help our nearest allied planet
+            if nearest_allied_planet != []:
+                if ship.can_dock(nearest_allied_planet):
+                    command_queue.append(ship.dock(nearest_allied_planet))
+                else:
+                    navigate_command = ship.navigate(
+                                ship.closest_point_to(nearest_allied_planet),
+                                game_map,
+                                speed=int(hlt.constants.MAX_SPEED),
+                                ignore_ships=False)
+                    if navigate_command:
+                        planets_queued.append(nearest_allied_planet)
+                        command_queue.append(navigate_command)
 
     # Send our set of commands to the Halite engine for this turn
     game.send_command_queue(command_queue)
