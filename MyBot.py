@@ -14,73 +14,97 @@ import logging
 # GAME START
 # Here we define the bot's name as Settler and initialize the game,
 #  including communication with the Halite engine.
-game = hlt.Game("Gabeb v.1")
+game = hlt.Game("Gabeb v.3")
 # Then we print our start message to the logs
-logging.info("Starting my Settler bot!")
+logging.info("Starting my bot!")
 
 planets_queued = []
+unowned_planets = []
 
 while True:
-    # TURN START
-    # Update the map for the new turn and get the latest version
+    # Update the map for the new turn
     game_map = game.update_map()
 
-    # Here we define the set of commands to be sent to the
-    #   Halite engine at the end of the turn
+    # Get a list of all the planets that are not owned
+    unowned_planets = [planet for planet in game_map.all_planets()
+                       if not planet.is_owned()]
+
+    # Here we define the set of commands to be sent
     command_queue = []
-    # For every ship that I control
-    for ship in game_map.get_me().all_ships():
-        # If the ship is docked
+
+    # Loop through all owned ships
+    me = game_map.my_id
+    my_ships = game_map.get_me().all_ships()
+
+    '''
+    s = f"num ships: {len(my_ships)}"
+    logging.info(s)
+    '''
+
+    for ship in my_ships:
+
+        # If ship is docked
         if ship.docking_status != ship.DockingStatus.UNDOCKED:
             # Skip this ship
             continue
 
-        # For each planet in the game (only non-destroyed planets are included)
-        for planet in game_map.all_planets():
+        # get dictionary of all entities with distances
+        d = game_map.nearby_entities_by_distance(ship)
+
+        # now, we want to turn this into a list of tuples,
+        # sorted by the distances
+        d = sorted(d.items(), key=lambda x: x[0])
+
+        # now, filter out everything that isn't a planet
+        d = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Planet)]
+
+        # For each non-destroyed planet
+        for planet in d:
             # If the planet is owned
             if planet.is_owned():
-                # Skip this planet
-                continue
-            # If one of our ships is already going to this planet
-            elif planet in planets_queued:
-                # skip the planet
-                continue
+                # Skip this planet IF there are other planets to go to
+                if len(unowned_planets) != 0:
+                    continue
+                else:
+                    # all planets have been taken
+                    if ship.can_dock(planet):
+                        # if we can dock at the planet, dock
+                        command_queue.append(ship.dock(planet))
+                        break
+                    else:
+                        continue
+                        # TODO: ADD THIS IN
+                        if planet.owner.id != me:
+                            # Attack other planets
+                            navigate_command = ship.navigate(planet,
+                                                             game_map,
+                                                             speed=int(hlt.constants.MAX_SPEED),
+                                                             ignore_ships=False)
+                            command_queue.append(navigate_command)
+                            break
 
-            # If we can dock, let's (try to) dock. If two ships try to dock at
+            ''' We do not own the planet '''
+
+            # If we can dock, let's try to dock. If two ships try to dock at
             #  once, neither will be able to.
             if ship.can_dock(planet):
                 # We add the command by appending it to the command_queue
                 command_queue.append(ship.dock(planet))
             else:
-                # If we can't dock, we move towards the closest empty point
-                #  near this planet (by using closest_point_to)
-                # with constant speed. Don't worry about pathfinding for now,
-                #  as the command will do it for you.
-                # We run this navigate command each turn until we arrive to
-                #  get the latest move.
-                # Here we move at half our maximum speed to better control
-                #  the ships
-                # In order to execute faster we also choose to ignore ship
-                #  collision calculations during navigation.
-                # This will mean that you have a higher probability of
-                #  crashing into ships, but it also means you will
-                # make move decisions much quicker. As your skill progresses
-                #  and your moves turn more optimal you may
-                # wish to turn that option off.
-                navigate_command = ship.navigate(
-                    ship.closest_point_to(planet),
-                    game_map,
-                    speed=int(hlt.constants.MAX_SPEED),
-                    ignore_ships=True)
-                planets_queued.append(planet)
-                # If the move is possible, add it to the command_queue
-                #  (if there are too many obstacles on the way
-                # or we are trapped (or we reached our destination!),
-                #  navigate_command will return null;
-                # don't fret though, we can run the command again the
-                #   next turn)
-                if navigate_command:
-                    command_queue.append(navigate_command)
+                # If one of our ships is already going to this planet
+                if planet in planets_queued:
+                    # skip the planet
+                    continue
+                else:
+                    # go to the planet
+                    navigate_command = ship.navigate(
+                        ship.closest_point_to(planet),
+                        game_map,
+                        speed=int(hlt.constants.MAX_SPEED),
+                        ignore_ships=False)
+                    if navigate_command:
+                        planets_queued.append(planet)
+                        command_queue.append(navigate_command)
             break
 
     # Send our set of commands to the Halite engine for this turn
