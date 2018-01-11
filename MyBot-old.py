@@ -9,13 +9,10 @@ communicate with the Halite engine. If you need
 to log anything use the logging module.
 """
 import hlt
-import logging
 
-# GAME START
-# Here we define the bot's name as Settler and initialize the game,
-#  including communication with the Halite engine.
-game = hlt.Game("Gabeb v.4")
-# Then we print our start message to the logs
+ATTACK_MODE = False
+
+game = hlt.Game("Gabeb v.5")
 
 unowned_planets = []
 
@@ -53,36 +50,39 @@ while True:
         d = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Planet)]
 
         nearest_allied_planet = []
+        nearest_allied_dockable = []
         target_found = False
 
         # For each non-destroyed planet
         for planet in d:
             # If the planet is owned
             if planet.is_owned():
+
                 if nearest_allied_planet == []:
                     nearest_allied_planet = planet
+                if nearest_allied_dockable == [] and not planet.is_full():
+                    nearest_allied_dockable = planet
+
                 # Skip this planet IF there are other planets to go to
                 if len(unowned_planets) != 0:
                     continue
                 else:
-                    # all planets have been taken
-                    if ship.can_dock(planet):
-                        # if we can dock at the planet, dock
-                        command_queue.append(ship.dock(planet))
-                        break
-                    else:
-                        continue
-                        # TODO: ADD THIS IN
-                        if planet.owner.id != me:
-                            # Attack other planets
-                            navigate_command = ship.navigate(planet,
-                                                             game_map,
-                                                             speed=int(hlt.constants.MAX_SPEED),
-                                                             ignore_ships=False)
-                            command_queue.append(navigate_command)
+                    # all planets have been taken, then go to the nearest
+                    #  dockable planet
+                    if nearest_allied_dockable != []:
+                        if ship.can_dock(nearest_allied_dockable):
+                            command_queue.append(ship.dock(nearest_allied_dockable))
                             break
-
-            ''' We do not own the planet '''
+                        else:
+                            navigate_command = ship.navigate(
+                                    ship.closest_point_to(nearest_allied_dockable),
+                                    game_map,
+                                    speed=int(hlt.constants.MAX_SPEED),
+                                    ignore_ships=False)
+                            if navigate_command:
+                                planets_queued.append(nearest_allied_dockable)
+                                command_queue.append(navigate_command)
+                            break
 
             # If we can dock, let's try to dock. If two ships try to dock at
             #  once, neither will be able to.

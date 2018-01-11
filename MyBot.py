@@ -1,71 +1,73 @@
-"""
-1. Initialize game
-2. If a ship is not docked and there are unowned planets
-    2.a. Try to Dock in the planet if close enough
-    2.b If not, go towards the planet
-
-Note: Please do not place print statements here as they are used to
-communicate with the Halite engine. If you need
-to log anything use the logging module.
-"""
 import hlt
 import logging
+import time
 
-# GAME START
-# Here we define the bot's name as Settler and initialize the game,
-#  including communication with the Halite engine.
-game = hlt.Game("Gabeb v.5")
-# Then we print our start message to the logs
-logging.info("Starting my bot!")
+game = hlt.Game("Gabeb v.6")
+count = 0
+MAX_SPEED = int(hlt.constants.MAX_SPEED)
 
-unowned_planets = []
+
+def is_docked(ship):
+    if ship.docking_status != ship.DockingStatus.UNDOCKED:
+        return True
+
+
+def get_closest_entities(game_map, ship):
+    # get dictionary of all entities with distances
+    d = game_map.nearby_entities_by_distance(ship)
+    # now, we want to turn this into a list of tuples,
+    # sorted by the distances
+    d = sorted(d.items(), key=lambda x: x[0])
+    # now, filter out everything that isn't a planet
+    planets = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Planet)]
+    ships = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Ship)]
+    return planets, ships
+
+
+def get_closest_enemy(game_map, enemies):
+    # get dictionary of all entities with distances
+    for e in enemies:
+        if game_map.my_id != e.owner.id:
+            return e
 
 while True:
-    planets_queued = []
-    # Update the map for the new turn
+    s_time = time.time()
+    count += 1
+    # logging.info(f"Turn: {count}")
     game_map = game.update_map()
 
+    # List of planets that we will be going to
+    planets_queued = []
+    # Define the set of commands to be sent
+    command_queue = []
     # Get a list of all the planets that are not owned
     unowned_planets = [planet for planet in game_map.all_planets()
                        if not planet.is_owned()]
 
-    # Here we define the set of commands to be sent
-    command_queue = []
+    planet_targetted = {p: 0 for p in game_map.all_planets()}
 
-    # Loop through all owned ships
-    me = game_map.my_id
-    my_ships = game_map.get_me().all_ships()
+    # Loop through owned ships
+    for ship in game_map.get_me().all_ships():
 
-    for ship in my_ships:
+        # if len(unowned_planets) == 0:
+            # logging.info("New Ship - Phase 2")
+        # else:
+            # logging.info("New Ship - Phase 1")
 
-        # If ship is docked
-        if ship.docking_status != ship.DockingStatus.UNDOCKED:
-            # Skip this ship
+        if is_docked(ship):
             continue
 
-        # get dictionary of all entities with distances
-        d = game_map.nearby_entities_by_distance(ship)
-
-        # now, we want to turn this into a list of tuples,
-        # sorted by the distances
-        d = sorted(d.items(), key=lambda x: x[0])
-
-        # now, filter out everything that isn't a planet
-        d = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Planet)]
-
+        planets, enemies = get_closest_entities(game_map, ship)
         nearest_allied_planet = []
-        nearest_allied_dockable = []
         target_found = False
 
         # For each non-destroyed planet
-        for planet in d:
+        for planet in planets:
             # If the planet is owned
             if planet.is_owned():
 
                 if nearest_allied_planet == []:
                     nearest_allied_planet = planet
-                if nearest_allied_dockable == [] and not planet.is_full():
-                    nearest_allied_dockable = planet
 
                 # Skip this planet IF there are other planets to go to
                 if len(unowned_planets) != 0:
@@ -73,21 +75,31 @@ while True:
                 else:
                     # all planets have been taken, then go to the nearest
                     #  dockable planet
-                    logging.info(f"Endgame Stage - nearest dockable is {nearest_allied_dockable}")
-                    if nearest_allied_dockable != []:
-                        if ship.can_dock(nearest_allied_dockable):
-                            command_queue.append(ship.dock(nearest_allied_dockable))
+                    planned_docking = len(planet._docked_ship_ids) + planet_targetted[planet]
+                    if planned_docking < planet.num_docking_spots:
+                        target_found = True
+                        if ship.can_dock(planet):
+                            command_queue.append(ship.dock(planet))
                             break
                         else:
                             navigate_command = ship.navigate(
-                                    ship.closest_point_to(nearest_allied_dockable),
+                                    ship.closest_point_to(planet),
                                     game_map,
-                                    speed=int(hlt.constants.MAX_SPEED),
+                                    speed=MAX_SPEED,
                                     ignore_ships=False)
                             if navigate_command:
-                                planets_queued.append(nearest_allied_dockable)
+                                planets_queued.append(planet)
                                 command_queue.append(navigate_command)
+                                # planet_targetted[planet] += 1 TODO
                             break
+                    else:
+                        if (time.time() - s_time) < .5:
+                            nearest_enemy = get_closest_enemy(game_map, enemies)
+                            # logging.info(f"nearest_enemy: {nearest_enemy}")
+                            navigate_command = ship.navigate(nearest_enemy, game_map, speed=MAX_SPEED)
+                            if navigate_command:
+                                command_queue.append(navigate_command)
+                        break
 
             # If we can dock, let's try to dock. If two ships try to dock at
             #  once, neither will be able to.
@@ -106,13 +118,16 @@ while True:
                     navigate_command = ship.navigate(
                         ship.closest_point_to(planet),
                         game_map,
-                        speed=int(hlt.constants.MAX_SPEED),
+                        speed=MAX_SPEED,
                         ignore_ships=False)
                     if navigate_command:
                         target_found = True
                         planets_queued.append(planet)
                         command_queue.append(navigate_command)
+                        # planet_targetted[planet] += 1 TODO
                         break
+
+        # logging.info(f"target_found: {target_found}")
 
         # there are planets left but all are already targetted
         if len(unowned_planets) != 0 and not target_found:
@@ -123,14 +138,11 @@ while True:
                 else:
                     navigate_command = ship.navigate(
                                 ship.closest_point_to(nearest_allied_planet),
-                                game_map,
-                                speed=int(hlt.constants.MAX_SPEED),
+                                game_map, speed=MAX_SPEED,
                                 ignore_ships=False)
                     if navigate_command:
                         planets_queued.append(nearest_allied_planet)
                         command_queue.append(navigate_command)
-
-    # Send our set of commands to the Halite engine for this turn
+                        # planet_targetted[planet] += 1 TODO
+    logging.info(f"time: {time.time() - s_time}")
     game.send_command_queue(command_queue)
-    # TURN END
-# GAME END
