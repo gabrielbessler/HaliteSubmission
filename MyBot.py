@@ -66,7 +66,7 @@ while True:
                 continue
             else:
                 navigate_command = ship.navigate(
-                                        target,
+                                        ship.closest_point_to(target),
                                         game_map)
                 command_queue.append(navigate_command)
         if dock_count == len(game_map.get_me().all_ships()):

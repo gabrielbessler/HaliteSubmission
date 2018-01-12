@@ -19,13 +19,7 @@ def get_closest_entities(game_map, ship):
     # Now, filter out everything that isn't a planet
     planets = [e[1][0] for e in d if isinstance(e[1][0], hlt.entity.Planet)]
 
-    # enemy = None
-    # for e in d:
-    #     if isinstance(e[1][0], hlt.entity.Ship):
-    #         if game_map.my_id != e[1][0].owner.id:
-    #             enemy = e[1][0]
-
-    return planets  # ,enemy
+    return planets
 
 
 def initial_setup(game_map):
