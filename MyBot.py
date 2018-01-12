@@ -83,7 +83,7 @@ while True:
     for ship in game_map.get_me().all_ships():
 
         ''' TIME FAILSAFE '''
-        if (time.time() - s_time) >= 1.90:
+        if (time.time() - s_time) >= 1.95:
             game.send_command_queue(command_queue)
             break
 
@@ -157,15 +157,20 @@ while True:
             # if after looping through all planets we haven't found a target
             # that means all planets are full
             # TODO: make this better
-            logging.warning("Problem?")
             # for now, just attack enemy planets
-            enemy = closest_enemy_planet.get_docked_ship(
-                closest_enemy_planet._docked_ship_ids[0])
-            navigate_command = ship.navigate(enemy, game_map)
-            if navigate_command:
-                planet_targetted[closest_enemy_planet] += 1
-                command_queue.append(navigate_command)
+            if closest_enemy_planet is not None:
+                enemy = closest_enemy_planet.get_docked_ship(
+                    closest_enemy_planet._docked_ship_ids[0])
+                navigate_command = ship.navigate(enemy, game_map)
+                if navigate_command:
+                    planet_targetted[closest_enemy_planet] += 1
+                    command_queue.append(navigate_command)
+            else:
+                # TODO:
+                # attack leftover enemy ships
+                pass
 
+    logging.info(time.time() - s_time)
     game.send_command_queue(command_queue)
     continue
 
