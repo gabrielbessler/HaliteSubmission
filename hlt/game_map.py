@@ -4,7 +4,7 @@ from . import collision, entity
 class Map:
     """
     Map which houses the current game information/metadata.
-    
+
     :ivar my_id: Current player id associated with the map
     :ivar width: Map width
     :ivar height: Map height
@@ -71,6 +71,13 @@ class Map:
                 continue
             result.setdefault(entity.calculate_distance_between(foreign_entity), []).append(foreign_entity)
         return result
+
+    def nearby_planets_by_distance(self, entity):
+        result = {}
+        for foreign_entity in self.all_planets():
+            result.setdefault(entity.calculate_distance_between(foreign_entity), []).append(foreign_entity)
+        return result
+
 
     def _link(self):
         """

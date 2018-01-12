@@ -94,6 +94,5 @@ class Game:
             self._send_string(self._name)
             self._done_sending()
             self._send_name = False
-        logging.info("---NEW TURN---")
         self.map._parse(self._get_string())
         return self.map

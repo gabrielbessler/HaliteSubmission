@@ -206,7 +206,7 @@ class Planet(Entity):
 class Ship(Entity):
     """
     A ship in the game.
-    
+
     :ivar id: The ship ID.
     :ivar x: The ship x-coordinate.
     :ivar y: The ship y-coordinate.
@@ -269,7 +269,7 @@ class Ship(Entity):
         """
         return "u {}".format(self.id)
 
-    def navigate(self, target, game_map, speed, avoid_obstacles=True, max_corrections=90, angular_step=1,
+    def navigate(self, target, game_map, avoid_obstacles=True, max_corrections=90, angular_step=2,
                  ignore_ships=False, ignore_planets=False):
         """
         Move a ship to a specific target position (Entity). It is recommended to place the position
@@ -293,18 +293,24 @@ class Ship(Entity):
         # Assumes a position, not planet (as it would go to the center of the planet otherwise)
         if max_corrections <= 0:
             return None
+        # Calculate distance/angle
         distance = self.calculate_distance_between(target)
         angle = self.calculate_angle_between(target)
+        # Set ignore to be correct class based on arguments
         ignore = () if not (ignore_ships or ignore_planets) \
             else Ship if (ignore_ships and not ignore_planets) \
             else Planet if (ignore_planets and not ignore_ships) \
             else Entity
+
+        # actual calculations done here
         if avoid_obstacles and game_map.obstacles_between(self, target, ignore):
             new_target_dx = math.cos(math.radians(angle + angular_step)) * distance
             new_target_dy = math.sin(math.radians(angle + angular_step)) * distance
             new_target = Position(self.x + new_target_dx, self.y + new_target_dy)
-            return self.navigate(new_target, game_map, speed, True, max_corrections - 1, angular_step)
-        speed = speed if (distance >= speed) else distance
+            return self.navigate(new_target, game_map, True, max_corrections - 1, angular_step)
+        speed = 7 if (distance >= 7) else distance
+
+        # our command must output how fast we want to go and the angle
         return self.thrust(speed, angle)
 
     def can_dock(self, planet):
