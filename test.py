@@ -92,7 +92,6 @@ while True:
 
         ''' We are not docked '''
         planets = get_closest_entities(game_map, ship)
-
         closest_enemy_planet = None
 
         ''' Loop through planets (closest->farthest) '''
@@ -153,18 +152,17 @@ while True:
                         planet_targetted[planet] += 1
                         command_queue.append(navigate_command)
                         break
-        else:
-            # if after looping through all planets we haven't found a target
-            # that means all planets are full
-            # TODO: make this better
-            logging.warning("Problem?")
-            # for now, just attack enemy planets
-            enemy = closest_enemy_planet.get_docked_ship(
-                closest_enemy_planet._docked_ship_ids[0])
-            navigate_command = ship.navigate(enemy, game_map)
-            if navigate_command:
-                planet_targetted[closest_enemy_planet] += 1
-                command_queue.append(navigate_command)
+        # if after looping through all planets we haven't found a target
+        # that means all planets are full
+        # TODO: make this better
+
+        # for now, just attack enemy planets
+        enemy = closest_enemy_planet.get_docked_ship(
+            closest_enemy_planet._docked_ship_ids[0])
+        navigate_command = ship.navigate(enemy, game_map)
+        if navigate_command:
+            planet_targetted[planet] += 1
+            command_queue.append(navigate_command)
 
     game.send_command_queue(command_queue)
     continue
