@@ -1,0 +1,7 @@
+1. priority queue 
+2. compute the cost of getting to a particular tile, and then subtract that from the amount of minerals you could get from the tile 
+3. Add hashset
+4. Get around the issue of only checking one path per object (not the cheapest path)
+5. Maybe shortest path is not the best?
+6. Do one pass through to see which ships should stay in their spots 
+7. Make sure ships don't crash into each other when leaving the base 
