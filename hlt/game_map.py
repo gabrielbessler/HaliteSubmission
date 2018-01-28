@@ -1,231 +1,268 @@
-from . import collision, entity
+import queue
 
-
-class Map:
-    """
-    Map which houses the current game information/metadata.
-
-    :ivar my_id: Current player id associated with the map
-    :ivar width: Map width
-    :ivar height: Map height
-    """
-
-    def __init__(self, my_id, width, height):
-        """
-        :param my_id: User's id (tag)
-        :param width: Map width
-        :param height: Map height
-        """
-        self.my_id = my_id
-        self.width = width
-        self.height = height
-        self._players = {}
-        self._planets = {}
-
-    def get_me(self):
-        """
-        :return: The user's player
-        :rtype: Player
-        """
-        return self._players.get(self.my_id)
-
-    def get_player(self, player_id):
-        """
-        :param int player_id: The id of the desired player
-        :return: The player associated with player_id
-        :rtype: Player
-        """
-        return self._players.get(player_id)
-
-    def all_players(self):
-        """
-        :return: List of all players
-        :rtype: list[Player]
-        """
-        return list(self._players.values())
-
-    def get_planet(self, planet_id):
-        """
-        :param int planet_id:
-        :return: The planet associated with planet_id
-        :rtype: entity.Planet
-        """
-        return self._planets.get(planet_id)
-
-    def all_planets(self):
-        """
-        :return: List of all planets
-        :rtype: list[entity.Planet]
-        """
-        return list(self._planets.values())
-
-    def nearby_entities_by_distance(self, entity):
-        """
-        :param entity: The source entity to find distances from
-        :return: Dict containing all entities with their designated distances
-        :rtype: dict
-        """
-        result = {}
-        for foreign_entity in self._all_ships() + self.all_planets():
-            if entity == foreign_entity:
-                continue
-            result.setdefault(entity.calculate_distance_between(foreign_entity), []).append(foreign_entity)
-        return result
-
-    def nearby_planets_by_distance(self, entity):
-        result = {}
-        for foreign_entity in self.all_planets():
-            result.setdefault(entity.calculate_distance_between(foreign_entity), []).append(foreign_entity)
-        return result
-
-
-    def _link(self):
-        """
-        Updates all the entities with the correct ship and planet objects
-
-        :return:
-        """
-        for celestial_object in self.all_planets() + self._all_ships():
-            celestial_object._link(self._players, self._planets)
-
-    def _parse(self, map_string):
-        """
-        Parse the map description from the game.
-
-        :param map_string: The string which the Halite engine outputs
-        :return: nothing
-        """
-        tokens = map_string.split()
-
-        self._players, tokens = Player._parse(tokens)
-        self._planets, tokens = entity.Planet._parse(tokens)
-
-        assert(len(tokens) == 0)  # There should be no remaining tokens at this point
-        self._link()
-
-    def _all_ships(self):
-        """
-        Helper function to extract all ships from all players
-
-        :return: List of ships
-        :rtype: List[Ship]
-        """
-        all_ships = []
-        for player in self.all_players():
-            all_ships.extend(player.all_ships())
-        return all_ships
-
-    def _intersects_entity(self, target):
-        """
-        Check if the specified entity (x, y, r) intersects any planets. Entity is assumed to not be a planet.
-
-        :param entity.Entity target: The entity to check intersections with.
-        :return: The colliding entity if so, else None.
-        :rtype: entity.Entity
-        """
-        for celestial_object in self._all_ships() + self.all_planets():
-            if celestial_object is target:
-                continue
-            d = celestial_object.calculate_distance_between(target)
-            if d <= celestial_object.radius + target.radius + 0.1:
-                return celestial_object
-        return None
-
-    def obstacles_between(self, ship, target, ignore=()):
-        """
-        Check whether there is a straight-line path to the given point,
-        without planetary obstacles in between.
-
-        :param entity.Ship ship: Source entity
-        :param entity.Entity target: Target entity
-        :param entity.Entity ignore: Which entity type to ignore
-        :return: The list of obstacles between the ship and target
-        :rtype: list[entity.Entity]
-        """
-        obstacles = []
-        entities = ([] if issubclass(entity.Planet, ignore) else self.all_planets()) \
-            + ([] if issubclass(entity.Ship, ignore) else self._all_ships())
-        for foreign_entity in entities:
-            if foreign_entity == ship or foreign_entity == target:
-                continue
-            if collision.intersect_segment_circle(ship, target, foreign_entity, fudge=ship.radius + 0.1):
-                obstacles.append(foreign_entity)
-        return obstacles
-
-    def obstacles_between_better(self, ship, target, ignore=()):
-        obstacles = []
-        entities = ([] if issubclass(entity.Planet, ignore) else self.all_planets()) \
-            + ([] if issubclass(entity.Ship, ignore) else self._all_ships())
-        for foreign_entity in entities:
-            if foreign_entity == ship or foreign_entity == target:
-                continue
-            if collision.intersect_segment_circle(ship, target, foreign_entity, fudge=ship.radius + 0.1):
-                obstacles.append(foreign_entity)
-        return obstacles
+from . import constants
+from .entity import Entity, Shipyard, Ship, Dropoff
+from .positionals import Direction, Position
+from .common import read_input
 
 
 class Player:
     """
-    :ivar id: The player's unique id
+    Player object containing all items/metadata pertinent to the player.
     """
-    def __init__(self, player_id, ships={}):
-        """
-        :param player_id: User's id
-        :param ships: Ships user controls (optional)
-        """
+    def __init__(self, player_id, shipyard, halite=0):
         self.id = player_id
-        self._ships = ships
-
-    def all_ships(self):
-        """
-        :return: A list of all ships which belong to the user
-        :rtype: list[entity.Ship]
-        """
-        return list(self._ships.values())
+        self.shipyard = shipyard
+        self.halite_amount = halite
+        self._ships = {}
+        self._dropoffs = {}
 
     def get_ship(self, ship_id):
         """
-        :param int ship_id: The ship id of the desired ship.
-        :return: The ship designated by ship_id belonging to this user.
-        :rtype: entity.Ship
+        Returns a singular ship mapped by the ship id
+        :param ship_id: The ship id of the ship you wish to return
+        :return: the ship object.
         """
-        return self._ships.get(ship_id)
+        return self._ships[ship_id]
+
+    def get_ships(self):
+        """
+        :return: Returns all ship objects in a list
+        """
+        return list(self._ships.values())
+
+    def get_dropoff(self, dropoff_id):
+        """
+        Returns a singular dropoff mapped by its id
+        :param dropoff_id: The dropoff id to return
+        :return: The dropoff object
+        """
+        return self._dropoffs[dropoff_id]
+
+    def get_dropoffs(self):
+        """
+        :return: Returns all dropoff objects in a list
+        """
+        return list(self._dropoffs.values())
+
+    def has_ship(self, ship_id):
+        """
+        Check whether the player has a ship with a given ID.
+
+        Useful if you track ships via IDs elsewhere and want to make
+        sure the ship still exists.
+
+        :param ship_id: The ID to check.
+        :return: True if and only if the ship exists.
+        """
+        return ship_id in self._ships
+
 
     @staticmethod
-    def _parse_single(tokens):
+    def _generate():
         """
-        Parse one user given an input string from the Halite engine.
-
-        :param list[str] tokens: The input string as a list of str from the Halite engine.
-        :return: The parsed player id, player object, and remaining tokens
-        :rtype: (int, Player, list[str])
+        Creates a player object from the input given by the game engine
+        :return: The player object
         """
-        player_id, *remainder = tokens
-        player_id = int(player_id)
-        ships, remainder = entity.Ship._parse(player_id, remainder)
-        player = Player(player_id, ships)
-        return player_id, player, remainder
+        player, shipyard_x, shipyard_y = map(int, read_input().split())
+        return Player(player, Shipyard(player, -1, Position(shipyard_x, shipyard_y)))
 
-    @staticmethod
-    def _parse(tokens):
+    def _update(self, num_ships, num_dropoffs, halite):
         """
-        Parse an entire user input string from the Halite engine for all users.
-
-        :param list[str] tokens: The input string as a list of str from the Halite engine.
-        :return: The parsed players in the form of player dict, and remaining tokens
-        :rtype: (dict, list[str])
+        Updates this player object considering the input from the game engine for the current specific turn.
+        :param num_ships: The number of ships this player has this turn
+        :param num_dropoffs: The number of dropoffs this player has this turn
+        :param halite: How much halite the player has in total
+        :return: nothing.
         """
-        num_players, *remainder = tokens
-        num_players = int(num_players)
-        players = {}
+        self.halite_amount = halite
+        self._ships = {id: ship for (id, ship) in [Ship._generate(self.id) for _ in range(num_ships)]}
+        self._dropoffs = {id: dropoff for (id, dropoff) in [Dropoff._generate(self.id) for _ in range(num_dropoffs)]}
 
-        for _ in range(num_players):
-            player, players[player], remainder = Player._parse_single(remainder)
 
-        return players, remainder
+class MapCell:
+    """A cell on the game map."""
+    def __init__(self, position, halite_amount):
+        self.position = position
+        self.halite_amount = halite_amount
+        self.ship = None
+        self.structure = None
+
+    @property
+    def is_empty(self):
+        """
+        :return: Whether this cell has no ships or structures
+        """
+        return self.ship is None and self.structure is None
+
+    @property
+    def is_occupied(self):
+        """
+        :return: Whether this cell has any ships
+        """
+        return self.ship is not None
+
+    @property
+    def has_structure(self):
+        """
+        :return: Whether this cell has any structures
+        """
+        return self.structure is not None
+
+    @property
+    def structure_type(self):
+        """
+        :return: What is the structure type in this cell
+        """
+        return None if not self.structure else type(self.structure)
+
+    def mark_unsafe(self, ship):
+        """
+        Mark this cell as unsafe (occupied) for navigation.
+
+        Use in conjunction with GameMap.naive_navigate.
+        """
+        self.ship = ship
+
+    def __eq__(self, other):
+        return self.position == other.position
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __str__(self):
-        return "Player {} with ships {}".format(self.id, self.all_ships())
+        return 'MapCell({}, halite={})'.format(self.position, self.halite_amount)
 
-    def __repr__(self):
-        return self.__str__()
+
+class GameMap:
+    """
+    The game map.
+
+    Can be indexed by a position, or by a contained entity.
+    Coordinates start at 0. Coordinates are normalized for you
+    """
+    def __init__(self, cells, width, height):
+        self.width = width
+        self.height = height
+        self._cells = cells
+
+    def __getitem__(self, location):
+        """
+        Getter for position object or entity objects within the game map
+        :param location: the position or entity to access in this map
+        :return: the contents housing that cell or entity
+        """
+        if isinstance(location, Position):
+            location = self.normalize(location)
+            return self._cells[location.y][location.x]
+        elif isinstance(location, Entity):
+            return self._cells[location.position.y][location.position.x]
+        return None
+
+    def calculate_distance(self, source, target):
+        """
+        Compute the Manhattan distance between two locations.
+        Accounts for wrap-around.
+        :param source: The source from where to calculate
+        :param target: The target to where calculate
+        :return: The distance between these items
+        """
+        source = self.normalize(source)
+        target = self.normalize(target)
+        resulting_position = abs(source - target)
+        return min(resulting_position.x, self.width - resulting_position.x) + \
+            min(resulting_position.y, self.height - resulting_position.y)
+
+    def normalize(self, position):
+        """
+        Normalized the position within the bounds of the toroidal map.
+        i.e.: Takes a point which may or may not be within width and
+        height bounds, and places it within those bounds considering
+        wraparound.
+        :param position: A position object.
+        :return: A normalized position object fitting within the bounds of the map
+        """
+        return Position(position.x % self.width, position.y % self.height)
+
+    @staticmethod
+    def _get_target_direction(source, target):
+        """
+        Returns where in the cardinality spectrum the target is from source. e.g.: North, East; South, West; etc.
+        NOTE: Ignores toroid
+        :param source: The source position
+        :param target: The target position
+        :return: A tuple containing the target Direction. A tuple item (or both) could be None if within same coords
+        """
+        return (Direction.South if target.y > source.y else Direction.North if target.y < source.y else None,
+                Direction.East if target.x > source.x else Direction.West if target.x < source.x else None)
+
+    def get_unsafe_moves(self, source, destination):
+        """
+        Return the Direction(s) to move closer to the target point, or empty if the points are the same.
+        This move mechanic does not account for collisions. The multiple directions are if both directional movements
+        are viable.
+        :param source: The starting position
+        :param destination: The destination towards which you wish to move your object.
+        :return: A list of valid (closest) Directions towards your target.
+        """
+        source = self.normalize(source)
+        destination = self.normalize(destination)
+        possible_moves = []
+        distance = abs(destination - source)
+        y_cardinality, x_cardinality = self._get_target_direction(source, destination)
+
+        if distance.x != 0:
+            possible_moves.append(x_cardinality if distance.x < (self.width / 2)
+                                  else Direction.invert(x_cardinality))
+        if distance.y != 0:
+            possible_moves.append(y_cardinality if distance.y < (self.height / 2)
+                                  else Direction.invert(y_cardinality))
+        return possible_moves
+
+    def naive_navigate(self, ship, destination):
+        """
+        Returns a singular safe move towards the destination.
+
+        :param ship: The ship to move.
+        :param destination: Ending position
+        :return: A direction.
+        """
+        # No need to normalize destination, since get_unsafe_moves
+        # does that
+        for direction in self.get_unsafe_moves(ship.position, destination):
+            target_pos = ship.position.directional_offset(direction)
+            if not self[target_pos].is_occupied:
+                self[target_pos].mark_unsafe(ship)
+                return direction
+
+        return Direction.Still
+
+    @staticmethod
+    def _generate():
+        """
+        Creates a map object from the input given by the game engine
+        :return: The map object
+        """
+        map_width, map_height = map(int, read_input().split())
+        game_map = [[None for _ in range(map_width)] for _ in range(map_height)]
+        for y_position in range(map_height):
+            cells = read_input().split()
+            for x_position in range(map_width):
+                game_map[y_position][x_position] = MapCell(Position(x_position, y_position),
+                                                           int(cells[x_position]))
+        return GameMap(game_map, map_width, map_height)
+
+    def _update(self):
+        """
+        Updates this map object from the input given by the game engine
+        :return: nothing
+        """
+        # Mark cells as safe for navigation (will re-mark unsafe cells
+        # later)
+        for y in range(self.height):
+            for x in range(self.width):
+                self[Position(x, y)].ship = None
+
+        for _ in range(int(read_input())):
+            cell_x, cell_y, cell_energy = map(int, read_input().split())
+            self[Position(cell_x, cell_y)].halite_amount = cell_energy

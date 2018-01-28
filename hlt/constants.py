@@ -1,24 +1,60 @@
-#: Max number of units of distance a ship can travel in a turn
-MAX_SPEED = 7
-#: Radius of a ship
-SHIP_RADIUS = 0.5
-#: Starting health of ship, also its max
-MAX_SHIP_HEALTH = 255
-#: Starting health of ship, also its max
-BASE_SHIP_HEALTH = 255
-#: Weapon cooldown period
-WEAPON_COOLDOWN = 1
-#: Weapon damage radius
-WEAPON_RADIUS = 5.0
-#: Weapon damage
-WEAPON_DAMAGE = 64
-#: Radius in which explosions affect other entities
-EXPLOSION_RADIUS = 10.0
-#: Distance from the edge of the planet at which ships can try to dock
-DOCK_RADIUS = 4.0
-#: Number of turns it takes to dock a ship
-DOCK_TURNS = 5
-#: Number of production units per turn contributed by each docked ship
-BASE_PRODUCTIVITY = 6
-#: Distance from the planets edge at which new ships are created
-SPAWN_RADIUS = 2.0
+"""
+The constants representing the game variation being played.
+They come from game engine and changing them has no effect.
+They are strictly informational.
+"""
+
+
+def load_constants(constants):
+    """
+    Load constants from JSON given by the game engine.
+    """
+    global SHIP_COST, DROPOFF_COST, MAX_HALITE, MAX_TURNS
+    global EXTRACT_RATIO, MOVE_COST_RATIO
+    global INSPIRATION_ENABLED, INSPIRATION_RADIUS, INSPIRATION_SHIP_COUNT
+    global INSPIRED_EXTRACT_RATIO, INSPIRED_BONUS_MULTIPLIER, INSPIRED_MOVE_COST_RATIO
+
+    """The cost to build a single ship."""
+    SHIP_COST = constants['NEW_ENTITY_ENERGY_COST']
+
+    """The cost to build a dropoff."""
+    DROPOFF_COST = constants['DROPOFF_COST']
+
+    """The maximum amount of halite a ship can carry."""
+    MAX_HALITE = constants['MAX_ENERGY']
+
+    """
+    The maximum number of turns a game can last. This reflects the fact
+    that smaller maps play for fewer turns.
+    """
+    MAX_TURNS = constants['MAX_TURNS']
+
+    """1/EXTRACT_RATIO halite (truncated) is collected from a square per turn."""
+    EXTRACT_RATIO = constants['EXTRACT_RATIO']
+
+    """1/MOVE_COST_RATIO halite (truncated) is needed to move off a cell."""
+    MOVE_COST_RATIO = constants['MOVE_COST_RATIO']
+
+    """Whether inspiration is enabled."""
+    INSPIRATION_ENABLED = constants['INSPIRATION_ENABLED']
+
+    """
+    A ship is inspired if at least INSPIRATION_SHIP_COUNT opponent
+    ships are within this Manhattan distance.
+    """
+    INSPIRATION_RADIUS = constants['INSPIRATION_RADIUS']
+
+    """
+    A ship is inspired if at least this many opponent ships are within
+    INSPIRATION_RADIUS distance.
+    """
+    INSPIRATION_SHIP_COUNT = constants['INSPIRATION_SHIP_COUNT']
+
+    """An inspired ship mines 1/X halite from a cell per turn instead."""
+    INSPIRED_EXTRACT_RATIO = constants['INSPIRED_EXTRACT_RATIO']
+
+    """An inspired ship that removes Y halite from a cell collects X*Y additional halite."""
+    INSPIRED_BONUS_MULTIPLIER = constants['INSPIRED_BONUS_MULTIPLIER']
+
+    """An inspired ship instead spends 1/X% halite to move."""
+    INSPIRED_MOVE_COST_RATIO = constants['INSPIRED_MOVE_COST_RATIO']

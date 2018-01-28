@@ -1,98 +1,86 @@
-import sys
+import json
 import logging
-import copy
+import sys
 
-from . import game_map
+from .common import read_input
+from . import constants
+from .game_map import GameMap, Player
 
 
 class Game:
     """
-    :ivar map: Current map representation
-    :ivar initial_map: The initial version of the map before game starts
+    The game object holds all metadata pertinent to the game and all its contents
     """
+    def __init__(self):
+        """
+        Initiates a game object collecting all start-state instances for the contained items for pre-game.
+        Also sets up basic logging.
+        """
+        self.turn_number = 0
+
+        # Grab constants JSON
+        raw_constants = read_input()
+        constants.load_constants(json.loads(raw_constants))
+
+        num_players, self.my_id = map(int, read_input().split())
+
+        logging.basicConfig(
+            filename="bot-{}.log".format(self.my_id),
+            filemode="w",
+            level=logging.DEBUG,
+        )
+
+        self.players = {}
+        for player in range(num_players):
+            self.players[player] = Player._generate()
+        self.me = self.players[self.my_id]
+        self.game_map = GameMap._generate()
+
+    def ready(self, name):
+        """
+        Indicate that your bot is ready to play.
+        :param name: The name of your bot
+        """
+        send_commands([name])
+
+    def update_frame(self):
+        """
+        Updates the game object's state.
+        :returns: nothing.
+        """
+        self.turn_number = int(read_input())
+        logging.info("=============== TURN {:03} ================".format(self.turn_number))
+
+        for _ in range(len(self.players)):
+            player, num_ships, num_dropoffs, halite = map(int, read_input().split())
+            self.players[player]._update(num_ships, num_dropoffs, halite)
+
+        self.game_map._update()
+
+        # Mark cells with ships as unsafe for navigation
+        for player in self.players.values():
+            for ship in player.get_ships():
+                self.game_map[ship.position].mark_unsafe(ship)
+
+            self.game_map[player.shipyard.position].structure = player.shipyard
+            for dropoff in player.get_dropoffs():
+                self.game_map[dropoff.position].structure = dropoff
+
     @staticmethod
-    def _send_string(s):
+    def end_turn(commands):
         """
-        Send data to the game. Call :function:`done_sending` once finished.
-
-        :param str s: String to send
-        :return: nothing
+        Method to send all commands to the game engine, effectively ending your turn.
+        :param commands: Array of commands to send to engine
+        :return: nothing.
         """
-        sys.stdout.write(s)
+        send_commands(commands)
 
-    @staticmethod
-    def _done_sending():
-        """
-        Finish sending commands to the game.
 
-        :return: nothing
-        """
-        sys.stdout.write('\n')
-        sys.stdout.flush()
-
-    @staticmethod
-    def _get_string():
-        """
-        Read input from the game.
-
-        :return: The input read from the Halite engine
-        :rtype: str
-        """
-        result = sys.stdin.readline().rstrip('\n')
-        return result
-
-    @staticmethod
-    def send_command_queue(command_queue):
-        """
-        Issue the given list of commands.
-
-        :param list[str] command_queue: List of commands to send the Halite engine
-        :return: nothing
-        """
-        for command in command_queue:
-            Game._send_string(command)
-
-        Game._done_sending()
-
-    @staticmethod
-    def _set_up_logging(tag, name):
-        """
-        Set up and truncate the log
-
-        :param tag: The user tag (used for naming the log)
-        :param name: The bot name (used for naming the log)
-        :return: nothing
-        """
-        log_file = "{}_{}.log".format(tag, name)
-        logging.basicConfig(filename=log_file, level=logging.DEBUG, filemode='w')
-        logging.info("Initialized bot {}".format(name))
-
-    def __init__(self, name):
-        """
-        Initialize the bot with the given name.
-
-        :param name: The name of the bot.
-        """
-        self._name = name
-        self._send_name = False
-        tag = int(self._get_string())
-        Game._set_up_logging(tag, name)
-        width, height = [int(x) for x in self._get_string().strip().split()]
-        self.map = game_map.Map(tag, width, height)
-        self.update_map()
-        self.initial_map = copy.deepcopy(self.map)
-        self._send_name = True
-
-    def update_map(self):
-        """
-        Parse the map given by the engine.
-
-        :return: new parsed map
-        :rtype: game_map.Map
-        """
-        if self._send_name:
-            self._send_string(self._name)
-            self._done_sending()
-            self._send_name = False
-        self.map._parse(self._get_string())
-        return self.map
+def send_commands(commands):
+    """
+    Sends a list of commands to the engine.
+    :param commands: The list of commands to send.
+    :return: nothing.
+    """
+    print(" ".join(commands))
+    sys.stdout.flush()
