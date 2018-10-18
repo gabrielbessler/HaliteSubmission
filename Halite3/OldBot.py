@@ -22,7 +22,7 @@ game = hlt.Game()
 # At this point "game" variable is populated with initial map data.
 # This is a good place to do computationally expensive start-up pre-processing.
 # As soon as you call "ready" function below, the 2 second per turn timer will start.
-game.ready("Steve v.4")
+game.ready("Steve v.5")
 
 # Now that your bot is initialized, save a message to yourself in the log file with some important information.
 #   Here, you log here your id, which you can always fetch from the game object by using my_id.
@@ -68,6 +68,7 @@ while True:
             else: 
                 command_queue.append(ship.stay_still())
                 tiles_visited += [ship.position]
+
         # If there is not a lot of Halite at the current position go in random (valid) direction
         # OR if another ship is moving to this position 
         elif game_map[ship.position].halite_amount < constants.MAX_HALITE / 10 or game_map[ship.position].position in tiles_visited:
@@ -83,7 +84,8 @@ while True:
                 visited = [] # Stores all of the vertices we have already looked at 
                 queue = []
                 queue.append([ship.position, [], 0]) # Each element is [position, path, cost]
-                while steps_ahead < 20:
+                max_score = 0
+                while (not foundDirection and steps_ahead < 20) or (steps_ahead < 10):
                     # Look at one of the vertices 
                     vertex, path, cost = queue.pop(0)
 
@@ -94,9 +96,11 @@ while True:
                     resources = game_map[vertex].halite_amount
                     if cost < resources:
                         if len(path) != 0 and ship.position.directional_offset(path[0]) not in tiles_visited: 
-                            directionToMove = path[0]
-                            foundDirection = True 
-                            break
+                            score = (resources - cost) / steps_ahead
+                            if score > max_score: 
+                                max_score = score
+                                directionToMove = path[0]
+                                foundDirection = True 
                     
                     # Get all tiles you can access from it 
                     directions = [Direction.North, Direction.South, Direction.East, Direction.West] 
