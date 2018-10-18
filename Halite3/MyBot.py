@@ -27,9 +27,9 @@ class Utils(object):
 
 utils = Utils()
 DROPOFF_THRESHOLD = constants.MAX_HALITE * 0.8
-MAX_STEPS_AHEAD = 25
-MIN_STEPS_AHEAD = 15
-game.ready("Steve v.7")
+MAX_STEPS_AHEAD = 27
+MIN_STEPS_AHEAD = 17
+game.ready("Steve v.8")
 
 # Now that your bot is initialized, save a message to yourself in the log file with some important information.
 #   Here, you log here your id, which you can always fetch from the game object by using my_id.
@@ -107,7 +107,7 @@ while True:
 
         # If there is not a lot of Halite at the current position go in random (valid) direction
         # Or if another ship is moving to this position 
-        elif game_map[ship.position].halite_amount < constants.MAX_HALITE / 10 or game_map[ship.position].position in utils.tiles_visited:
+        elif game_map[ship.position].halite_amount < constants.MAX_HALITE / 20 or game_map[ship.position].position in utils.tiles_visited:
             # Check if we can move 
             if ship.halite_amount < (game_map[ship.position].halite_amount / 10):
                 add_stationary_to_queue(ship)
