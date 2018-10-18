@@ -3,8 +3,6 @@
 
 # Import the Halite SDK, which will let you interact with the game.
 import hlt
-
-# This library contains constant values.
 from hlt import constants
 
 # This library contains direction metadata to better interface with the game.
