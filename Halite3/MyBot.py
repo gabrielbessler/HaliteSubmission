@@ -12,25 +12,24 @@ import random
 import collections  
 
 # Logging allows you to save messages for yourself. This is required because the regular STDOUT
-#   (print statements) are reserved for the engine-bot communication.
+#   is reserved for the engine-bot communication.
 import logging
-
-""" <<<Game Begin>>> """
 
 # This game object contains the initial game state.
 game = hlt.Game()
 # At this point "game" variable is populated with initial map data.
 # This is a good place to do computationally expensive start-up pre-processing.
 # As soon as you call "ready" function below, the 2 second per turn timer will start.
+
 class Utils(object): 
     def __init__(self): 
         self.tiles_visited = [] 
 
 utils = Utils()
 DROPOFF_THRESHOLD = constants.MAX_HALITE * 0.8
-MAX_STEPS_AHEAD = 20
-MIN_STEPS_AHEAD = 10
-game.ready("Steve v.6")
+MAX_STEPS_AHEAD = 25
+MIN_STEPS_AHEAD = 15
+game.ready("Steve v.7")
 
 # Now that your bot is initialized, save a message to yourself in the log file with some important information.
 #   Here, you log here your id, which you can always fetch from the game object by using my_id.
@@ -80,8 +79,17 @@ while True:
         
         return destination, dropOffDistance
 
+    ships_fixed = [] 
+    # Check for ships that cannot move 
     for ship in me.get_ships(): 
-        
+        if ship.halite_amount < game_map[ship.position].halite_amount / 10: 
+            add_stationary_to_queue(ship)
+            ships_fixed.append(ship)
+
+    for ship in me.get_ships(): 
+        if ship in ships_fixed:
+            continue 
+    
         # If the ship is full, return to the drop-off zone 
         # If the game is almost over, drop off the rest of our resources 
         #   - When to drop off resources depends on how far ship is 
@@ -141,9 +149,9 @@ while True:
                     steps_ahead += 1
                     
                 if foundDirection is False: 
-                    if ship.position == me.shipyard.position:
+                    if ship.position == me.shipyard.position or ship.position in utils.tiles_visited:
                         add_move_to_queue(ship, get_valid_position(ship))
-                    else: 
+                    else:
                         add_stationary_to_queue(ship)
                 else:
                     add_move_to_queue(ship, directionToMove)
