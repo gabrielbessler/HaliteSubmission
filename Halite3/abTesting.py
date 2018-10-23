@@ -17,8 +17,8 @@ class CompareBots():
             if "Player 1" in result[index-18-self.bot_name_length:index+6]: 
                 with info[1]: 
                     info[0].value += 1
-
-    def run(self):         
+                    
+    def run(self):          
         threads = 3
         num_games = 9
         print("Starting...")

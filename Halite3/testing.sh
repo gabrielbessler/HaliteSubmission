@@ -1,7 +1,7 @@
 #!/bin/sh
-for ((i=1; i <= 50; ++i)) 
+for ((i=1; i <= 10; ++i)) 
 do 	
-	echo $i / 50 
+	echo $i / 10 
 	./halite --replay-directory replays/ -vvv --width 32 --height 32 "python3 MyBot.py" "python3 OldBot.py" &>> output.txt 
 done
 echo "Player 0 Wins: "

@@ -29,7 +29,7 @@ class Utils(object):
     def checkShipSpawn(self, game): 
         # If the game is in the first 100 turns and you have enough halite, spawn a ship
         # Prevent ships from colliding on spawn
-        if game.turn_number <= 150 and self.me.halite_amount >= constants.SHIP_COST and not self.game_map[me.shipyard].is_occupied:
+        if game.turn_number <= 165 and self.me.halite_amount >= constants.SHIP_COST and not self.game_map[me.shipyard].is_occupied:
             if self.game_map[self.me.shipyard].position not in self.tiles_visited:
                 self.commands.append(me.shipyard.spawn())
 
@@ -83,11 +83,16 @@ class Utils(object):
 
         return ships_fixed
 
-    def navigate(self, ship, destination): 
-        direction = self.game_map.naive_navigate(ship, drop_off_destination)
+    def navigate(self, ship, destination, ignoreCollision = False): 
+        if ignoreCollision: 
+            direction = self.game_map.get_unsafe_moves(ship.position, drop_off_destination)[0]
+        else: 
+            direction = self.game_map.naive_navigate(ship, drop_off_destination)
+        
         next_position = ship.position.directional_offset(direction) 
+        
         # Make sure we don't crash into another ship 
-        if next_position not in utils.tiles_visited:
+        if next_position not in utils.tiles_visited or ignoreCollision:
             utils.add_move_to_queue(ship, direction)
         elif ship.position not in utils.tiles_visited:
             utils.add_stationary_to_queue(ship)
@@ -96,9 +101,9 @@ class Utils(object):
 
 utils = Utils()
 DROPOFF_THRESHOLD = constants.MAX_HALITE * 0.8
-MAX_STEPS_AHEAD = 27
-MIN_STEPS_AHEAD = 17
-game.ready("Steve v.8")
+MAX_STEPS_AHEAD = 25
+MIN_STEPS_AHEAD = 20
+game.ready("Steve v.9")
 
 # Now that your bot is initialized, save a message to yourself in the log file with some important information.
 #   Here, you log here your id, which you can always fetch from the game object by using my_id.
@@ -123,8 +128,21 @@ while True:
         # If the game is almost over, drop off the rest of our resources 
         #   - When to drop off resources depends on how far ship is 
         drop_off_destination, drop_off_distance = utils.get_closest_dropoff(ship)
-        if ship.halite_amount > DROPOFF_THRESHOLD or (constants.MAX_TURNS - game.turn_number < drop_off_distance + 10 and ship.halite_amount > 0): 
-            utils.navigate(ship, drop_off_destination)
+        if ship.halite_amount > DROPOFF_THRESHOLD: 
+            if drop_off_distance == 1 and ((constants.MAX_TURNS - game.turn_number) < (drop_off_distance + 10)): 
+                utils.navigate(ship, drop_off_destination, True) 
+            else: 
+                utils.navigate(ship, drop_off_destination, False)  
+
+        elif ((constants.MAX_TURNS - game.turn_number) < (drop_off_distance + 10)) and ship.position != drop_off_destination: 
+            if drop_off_distance == 1: 
+                utils.navigate(ship, drop_off_destination, True) 
+            else: 
+                utils.navigate(ship, drop_off_destination, False)    
+
+        # If at the end of the game, make all of the ships crash at the drop-off point
+        elif ship.position == drop_off_destination and ((constants.MAX_TURNS - game.turn_number) < 10): 
+            utils.add_stationary_to_queue(ship)
 
         # If there is not a lot of Halite at the current position go in random (valid) direction
         # Or if another ship is moving to this position 
@@ -147,7 +165,7 @@ while True:
                     # Check if this vertex is a good destinatiom
                     resources = game_map[vertex].halite_amount
                     if cost < resources and len(path) != 0 and ship.position.directional_offset(path[0]) not in utils.tiles_visited:
-                            score = (resources - cost) / steps_ahead
+                            score = (resources - cost)**2 / steps_ahead
                             if score > max_score: 
                                 max_score = score
                                 directionToMove = path[0]
