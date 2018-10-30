@@ -1,52 +1,105 @@
 from multiprocessing.pool import ThreadPool 
-from multiprocessing import Value, Lock 
+from multiprocessing import Value, Lock, Array 
 import subprocess
 import time 
 import sys 
+import random 
+import json
 
 class CompareBots():
-    def __init__(self, shipOne, shipTwo, botNameLength): 
+    def __init__(self, shipOne, shipTwo, initialParameters, geneticAlgo=True): 
         self.shipOne = shipOne
         self.shipTwo = shipTwo
-        self.bot_name_length = botNameLength
+        self.initialParameters = initialParameters
+        self.geneticAlgo = geneticAlgo
 
-    def runGame(self, info): 
-        with subprocess.Popen(f"./halite -vvv --width 32 --height 32 \"python3 {self.shipOne}\" \"python3 {self.shipTwo}\"", shell=True, stderr=subprocess.PIPE) as proc: 
-            result = str(proc.stderr.read())
-            index = result.index("rank 1")
-            if "Player 1" in result[index-18-self.bot_name_length:index+6]: 
+    def runGame(self, info):
+        if self.geneticAlgo:  
+            parameters = info[4] 
+            s = " ".join(map(str, parameters))
+            botOne = f"\"python3 {self.shipOne} {s}\""
+        else: 
+            botOne = f"\"python3 {self.shipOne}\""
+        
+        args = "-vvv --no-logs --results-as-json --width 32 --height 32"
+        
+        botTwo = f"\"python3 {self.shipTwo}\""
+
+        with subprocess.Popen(f"./halite {args} {botOne} {botTwo}", shell=True, stdout=subprocess.PIPE) as proc: 
+            results = json.loads(proc.stdout.read())
+            print("Done!")
+            # print(results)
+            if results["stats"]["0"]["rank"] == 1: 
                 with info[1]: 
                     info[0].value += 1
-                    
+            
+            # Array is stored in info[2]
+            if self.geneticAlgo:
+                info[2][info[3]] = results["stats"]["0"]["score"] / results["stats"]["1"]["score"] 
+            
+    def perturb_parameters(self, parameters): 
+        return  [random.uniform(.9, 1.1) * x for x in parameters] 
+
+    def median(self, L): 
+        L = sorted(L)
+        return L[len(L) // 2]
+
     def run(self):          
-        threads = 3
-        num_games = 9
+        bots_per_generation = 4
+        num_generations = 1
+        games_per_bot = 5
         print("Starting...")
 
-        with open("comparisons/output.txt", "a") as outfile:
-            count = 0 
-            pool = ThreadPool()
-            lock = Lock()
-            val = Value("i", 0)
-            for i in range(int(num_games / threads)):
-                print(f"Generation {count}.")
-                count += 1
-                pool.map(self.runGame, [(val, lock) for i in range(threads)])
-            
-        print(f"Player One Wins: {val.value}")
-        print(f"Player Two Wins: {num_games - val.value}")
+        count = 0 
+        pool = ThreadPool()
+        lock = Lock()
 
+        array = Array("f", [0]*bots_per_generation)
+        val = Value("i", 0)
+
+        if self.geneticAlgo: 
+            best_parameters = self.initialParameters
+
+        for i in range(num_generations):
+            print(f"Generation {i}.")
+            scores = [[] for _ in range(bots_per_generation)]
+            for j in range(games_per_bot): 
+                if self.geneticAlgo: 
+                    parameters = [self.perturb_parameters(best_parameters) for i in range(bots_per_generation)]
+                    pool.map(self.runGame, [(val, lock, array, i, parameters[i]) for i in range(bots_per_generation)])
+                    
+                    for index, score in enumerate(array[:]): 
+                        scores[index].append(score)
+                    print(scores)
+                else: 
+                    pool.map(self.runGame, [(val, lock) for i in range(bots_per_generation)])
+
+            # Take median of 5 games as the actual score  
+            scores = list(map(self.median, scores))
+            print(scores) 
+
+            best_parameters = parameters[scores.index(max(scores))]
+            print(best_parameters)
+
+        print(f"Player Zero Wins: {val.value}")
+        print(f"Player One Wins: {num_generations * bots_per_generation * games_per_bot - val.value}")
+        
 if __name__ == "__main__":
+    # Bot to optimize
     botOne = "MyBot.py"
-    botTwo = "OldBot.py"
-    length = 9
+
+    # Bot to compare the first bot to
+    botTwo = "OldBot.py" 
+
+    initial_parameters = [800, 20, 165]
     for index, arg in enumerate(sys.argv[1:]):
         if index == 0:
             botOne = arg
-        if index == 1: 
+        elif index == 1: 
             botTwo = arg
-        if index == 2: 
-            length = arg
-    compare = CompareBots(botOne, botTwo, length) 
+        elif index == 2: 
+            initial_parameters = list(map(int, arg.split(",")))
+
+    compare = CompareBots(botOne, botTwo, initial_parameters, True) 
     compare.run()
     
