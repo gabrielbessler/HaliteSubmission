@@ -5,6 +5,7 @@ import time
 import sys 
 import random 
 import json
+import os 
 
 class CompareBots():
     def __init__(self, shipOne, shipTwo, initialParameters, geneticAlgo=True): 
@@ -35,7 +36,10 @@ class CompareBots():
             
             # Array is stored in info[2]
             if self.geneticAlgo:
-                info[2][info[3]] = results["stats"]["0"]["score"] / results["stats"]["1"]["score"] 
+                if results["stats"]["1"]["score"] == 0:
+                    pass # TODO
+                else: 
+                    info[2][info[3]] = results["stats"]["0"]["score"] / results["stats"]["1"]["score"] 
             
     def perturb_parameters(self, parameters): 
         return  [random.uniform(.9, 1.1) * x for x in parameters] 
@@ -84,22 +88,50 @@ class CompareBots():
         print(f"Player Zero Wins: {val.value}")
         print(f"Player One Wins: {num_generations * bots_per_generation * games_per_bot - val.value}")
         
-if __name__ == "__main__":
-    # Bot to optimize
-    botOne = "MyBot.py"
+def startsWith(string, beginning): 
+    if len(beginning) > len(string):
+        return False 
 
-    # Bot to compare the first bot to
-    botTwo = "OldBot.py" 
-
-    initial_parameters = [800, 20, 165]
-    for index, arg in enumerate(sys.argv[1:]):
-        if index == 0:
-            botOne = arg
-        elif index == 1: 
-            botTwo = arg
-        elif index == 2: 
-            initial_parameters = list(map(int, arg.split(",")))
-
-    compare = CompareBots(botOne, botTwo, initial_parameters, True) 
-    compare.run()
+    for i in range(len(beginning)): 
+        if string[i] is not beginning[i]:
+            return False 
     
+    return True 
+
+if __name__ == "__main__":
+    parameters = {
+            "--bot-one": "MyBot.py", # bot to optimize
+            "--bot-two": "MyBot.py", # bot to compare the first bot to 
+            "--parameters": [800, 20, 165] # initial parameters for bot 
+            }
+    
+    foundError = False 
+    for index, arg in enumerate(sys.argv[1:]):
+        foundParameter = False 
+        for parameterName in parameters.keys(): 
+	    # Check for parameter name match 
+            if startsWith(arg, parameterName) and len(arg) >= len(parameterName) + 2:
+                foundParameter = True  
+                if arg[len(parameterName)] is "=":
+                    result = arg[len(parameterName) + 1:]
+                    if parameterName is "--parameters":
+                        parameters[parameterName] = list(map(int, result.split(",")))
+                    else: 
+                        parameters[parameterName] = result 
+                else: 
+                    print("Paremeters are incorrectly formatted")
+                    foundError = True
+                    break 
+        if not foundParameter: 
+            print("Parameter " + arg + " not found")
+            break 
+
+    # Check that the bots exist 
+    if not os.path.isfile(parameters["--bot-one"]):  
+        print("Could not find " + parameters["--bot-one"])
+    elif not os.path.isfile(parameters["--bot-two"]):
+        print("Could not find " + parameters["--bot-two"])
+    elif not foundError: 
+        compare = CompareBots(parameters["--bot-one"], parameters["--bot-two"], parameters["--parameters"], True) 
+        compare.run()
+
